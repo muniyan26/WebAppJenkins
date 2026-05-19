@@ -36,7 +36,14 @@ pipeline {
 
         stage('Publish') {
             steps {
-                bat "dotnet publish %PROJECT% -c Release -o %PUBLISH_DIR%"
+
+                bat """
+                del /f /s /q "%PUBLISH_DIR%\\*"
+                for /d %%p in ("%PUBLISH_DIR%\\*") do rmdir "%%p" /s /q
+                dotnet clean %PROJECT%
+                dotnet publish %PROJECT% -c Release -o "%PUBLISH_DIR%"
+                """
+                //bat "dotnet publish %PROJECT% -c Release -o %PUBLISH_DIR%"
             }
         }
 
@@ -44,7 +51,7 @@ pipeline {
             steps {
                 bat """
                 powershell Stop-WebAppPool -Name 'WenJenkinks'
-                xcopy /E /Y publish\\* %IIS_PATH%
+                //xcopy /E /Y publish\\* %IIS_PATH%
                 powershell Start-WebAppPool -Name 'WenJenkinks'
                 """
             }
