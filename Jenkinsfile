@@ -2,21 +2,25 @@
     agent any
 
     parameters {
-        booleanParam(name: 'ROLLBACK', defaultValue: false, description: 'Rollback to previous version')
+        booleanParam(
+            name: 'ROLLBACK',
+            defaultValue: false,
+            description: 'Rollback to previous version'
+        )
     }
 
     environment {
         PROJECT = "WebApplication1.csproj"
         PUBLISH_DIR = "publish"
         IIS_PATH = "D:\\Backup\\Jenkins\\Publish"
+        APP_POOL = "WebJenkins"
     }
 
     stages {
 
         stage('Checkout') {
             steps {
-                git branch: 'master',
-                url: 'https://github.com/muniyan26/WebAppJenkins.git'
+                checkout scm
             }
         }
 
@@ -41,18 +45,18 @@
         stage('Publish') {
             steps {
                 bat """
-                if exist %PUBLISH_DIR% rmdir /s /q %PUBLISH_DIR%
-                mkdir %PUBLISH_DIR%
+                if exist "%PUBLISH_DIR%" rmdir /s /q "%PUBLISH_DIR%"
+                mkdir "%PUBLISH_DIR%"
 
-                dotnet clean %PROJECT%
-                dotnet publish %PROJECT% -c Release -o %PUBLISH_DIR%
+                dotnet clean "%PROJECT%"
+                dotnet publish "%PROJECT%" -c Release -o "%PUBLISH_DIR%"
                 """
             }
         }
 
-        stage('Deploy to IIS (Safe)') {
+        stage('Deploy to IIS') {
             when {
-                expression { return params.ROLLBACK == false }
+                expression { !params.ROLLBACK }
             }
             steps {
                 bat """
@@ -60,45 +64,45 @@
                 set STAGING_DIR=%IIS_PATH%_staging
 
                 echo Stopping IIS App Pool...
-                powershell -Command "Stop-WebAppPool -Name 'WebJenkins'"
+                powershell -Command "Stop-WebAppPool -Name '%APP_POOL%'"
 
                 echo Creating backup...
-                if exist %IIS_PATH% (
-                    robocopy %IIS_PATH% %BACKUP_DIR% /MIR /NFL /NDL /NJH /NJS
+                if exist "%IIS_PATH%" (
+                    robocopy "%IIS_PATH%" "%BACKUP_DIR%" /MIR /NFL /NDL /NJH /NJS
                 )
 
                 echo Preparing staging folder...
-                if exist %STAGING_DIR% rmdir /s /q %STAGING_DIR%
-                mkdir %STAGING_DIR%
+                if exist "%STAGING_DIR%" rmdir /s /q "%STAGING_DIR%"
+                mkdir "%STAGING_DIR%"
 
-                echo Copying publish output to staging...
-                robocopy %PUBLISH_DIR% %STAGING_DIR% /MIR /NFL /NDL /NJH /NJS
+                echo Copying publish output...
+                robocopy "%PUBLISH_DIR%" "%STAGING_DIR%" /MIR /NFL /NDL /NJH /NJS
 
-                echo Replacing IIS folder with new version...
-                rmdir /s /q %IIS_PATH%
-                move %STAGING_DIR% %IIS_PATH%
+                echo Replacing IIS folder...
+                if exist "%IIS_PATH%" rmdir /s /q "%IIS_PATH%"
+                move "%STAGING_DIR%" "%IIS_PATH%"
 
                 echo Starting IIS App Pool...
-                powershell -Command "Start-WebAppPool -Name 'WebJenkins'"
+                powershell -Command "Start-WebAppPool -Name '%APP_POOL%'"
                 """
             }
         }
 
         stage('Rollback') {
             when {
-                expression { return params.ROLLBACK == true }
+                expression { params.ROLLBACK }
             }
             steps {
                 bat """
                 echo ROLLBACK INITIATED
 
-                powershell -Command "Stop-WebAppPool -Name 'WebJenkins'"
+                powershell -Command "Stop-WebAppPool -Name '%APP_POOL%'"
 
-                if exist %IIS_PATH% rmdir /s /q %IIS_PATH%
+                if exist "%IIS_PATH%" rmdir /s /q "%IIS_PATH%"
 
-                robocopy %IIS_PATH%_backup %IIS_PATH% /MIR /NFL /NDL /NJH /NJS
+                robocopy "%IIS_PATH%_backup" "%IIS_PATH%" /MIR /NFL /NDL /NJH /NJS
 
-                powershell -Command "Start-WebAppPool -Name 'WebJenkins'"
+                powershell -Command "Start-WebAppPool -Name '%APP_POOL%'"
 
                 echo Rollback completed successfully
                 """
