@@ -50,9 +50,9 @@ pipeline {
         stage('Deploy to IIS') {
             steps {
                 bat """
-                powershell Stop-WebAppPool -Name 'WenJenkinks'
-                //xcopy /E /Y publish\\* %IIS_PATH%
-                powershell Start-WebAppPool -Name 'WenJenkinks'
+                powershell Stop-WebAppPool -Name 'WebJenkins'
+                robocopy publish %IIS_PATH% /MIR /NFL /NDL /NJH /NJS
+                powershell Start-WebAppPool -Name 'WebJenkins'
                 """
             }
         }
