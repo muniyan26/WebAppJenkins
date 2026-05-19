@@ -43,9 +43,9 @@ pipeline {
         stage('Deploy to IIS') {
             steps {
                 bat """
-                powershell Stop-WebAppPool -Name 'MyAppPool'
+                powershell Stop-WebAppPool -Name 'WenJenkinks'
                 xcopy /E /Y publish\\* %IIS_PATH%
-                powershell Start-WebAppPool -Name 'MyAppPool'
+                powershell Start-WebAppPool -Name 'WenJenkinks'
                 """
             }
         }
