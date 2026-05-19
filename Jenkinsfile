@@ -1,18 +1,26 @@
 pipeline {
     agent any
 
+    parameters {
+        booleanParam(
+            name: 'ROLLBACK',
+            defaultValue: false,
+            description: 'Rollback to previous version'
+        )
+    }
+
     environment {
         PROJECT = "WebApplication1.csproj"
         PUBLISH_DIR = "publish"
         IIS_PATH = "D:\\Backup\\Jenkins\\Publish"
+        APP_POOL = "WebJenkins"
     }
 
     stages {
 
         stage('Checkout') {
             steps {
-                git branch: 'master',
-                url: 'https://github.com/muniyan26/WebAppJenkins.git'
+                checkout scm
             }
         }
 
@@ -36,25 +44,88 @@ pipeline {
 
         stage('Publish') {
             steps {
-
                 bat """
-                del /f /s /q "%PUBLISH_DIR%\\*"
-                for /d %%p in ("%PUBLISH_DIR%\\*") do rmdir "%%p" /s /q
-                dotnet clean %PROJECT%
-                dotnet publish %PROJECT% -c Release -o "%PUBLISH_DIR%"
+                if exist "%PUBLISH_DIR%" rmdir /s /q "%PUBLISH_DIR%"
+                mkdir "%PUBLISH_DIR%"
+
+                dotnet clean "%PROJECT%"
+                dotnet publish "%PROJECT%" -c Release -o "%PUBLISH_DIR%"
                 """
-                //bat "dotnet publish %PROJECT% -c Release -o %PUBLISH_DIR%"
             }
         }
 
         stage('Deploy to IIS') {
+            when {
+                expression { !params.ROLLBACK }
+            }
             steps {
                 bat """
-                powershell Stop-WebAppPool -Name 'WebJenkins'
-                robocopy publish %IIS_PATH% /MIR /NFL /NDL /NJH /NJS
-                powershell Start-WebAppPool -Name 'WebJenkins'
+                set BACKUP_DIR=%IIS_PATH%_backup
+                set STAGING_DIR=%IIS_PATH%_staging
+
+                echo Stopping IIS App Pool...
+                powershell -Command "Stop-WebAppPool -Name '%APP_POOL%'"
+
+                echo Creating backup...
+                if exist "%IIS_PATH%" (
+                    robocopy "%IIS_PATH%" "%BACKUP_DIR%" /MIR /NFL /NDL /NJH /NJS
+                )
+
+                echo Preparing staging folder...
+                if exist "%STAGING_DIR%" rmdir /s /q "%STAGING_DIR%"
+                mkdir "%STAGING_DIR%"
+
+                echo Copying publish output...
+                robocopy "%PUBLISH_DIR%" "%STAGING_DIR%" /MIR /NFL /NDL /NJH /NJS
+
+                echo Replacing IIS folder...
+                if exist "%IIS_PATH%" rmdir /s /q "%IIS_PATH%"
+                move "%STAGING_DIR%" "%IIS_PATH%"
+
+                echo Starting IIS App Pool...
+                powershell -Command "Start-WebAppPool -Name '%APP_POOL%'"
                 """
             }
+        }
+
+        stage('Rollback') {
+            when {
+                expression { params.ROLLBACK }
+            }
+            steps {
+                bat """
+                echo ROLLBACK INITIATED
+
+                powershell -Command "Stop-WebAppPool -Name '%APP_POOL%'"
+
+                if exist "%IIS_PATH%" rmdir /s /q "%IIS_PATH%"
+
+                robocopy "%IIS_PATH%_backup" "%IIS_PATH%" /MIR /NFL /NDL /NJH /NJS
+
+                powershell -Command "Start-WebAppPool -Name '%APP_POOL%'"
+
+                echo Rollback completed successfully
+                """
+            }
+        }
+    }
+
+    post {
+        success {
+            echo 'Pipeline completed successfully 🎉'
+        }
+
+        failure {
+            echo 'Pipeline failed ❌ Check logs'
+        }
+
+        unstable {
+            echo 'Build unstable ⚠️'
+        }
+
+        always {
+            echo 'Cleaning workspace...'
+            cleanWs()
         }
     }
 }
