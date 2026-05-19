@@ -92,6 +92,7 @@ pipeline {
                     timeout /t 5
 
                     powershell -Command "Start-WebAppPool -Name '%APP_POOL%'"
+                    powershell -Command "Start-Website -Name '%APP_POOL%'"
                 """
             }
         }
